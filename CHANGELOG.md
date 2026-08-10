@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.0] - 2026-08-10
+
+### Added
+
+- Undo and redo controls for the 10 most recent structural dashboard changes.
+- Keyboard shortcuts for undo and redo outside editable fields.
+- Custom confirmation dialog for deleting links, widgets, sections, and dashboards.
+
+### Changed
+
+- Destructive actions are now consistently highlighted in red, including the `Delete Link` and `Delete Widget` entries in the link context menu.
+- Deletions can be recovered through the session history after confirmation.
+
 ## [1.0.0] - 2026-07-04
 
 ### Added

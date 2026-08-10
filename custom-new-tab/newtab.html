@@ -113,6 +113,23 @@
       aria-live="polite"
     ></div>
 
+    <div id="historyControls" class="history-controls" aria-label="Historique">
+      <button class="history-button" type="button" data-action="undo" aria-label="Annuler la dernière modification" title="Annuler"></button>
+      <button class="history-button" type="button" data-action="redo" aria-label="Rétablir la dernière modification" title="Rétablir"></button>
+    </div>
+
+    <dialog id="deleteConfirmDialog" class="dialog delete-confirm-dialog">
+      <div class="dialog-panel delete-confirm-panel">
+        <div class="delete-confirm-icon" aria-hidden="true"></div>
+        <h2 id="deleteConfirmTitle">Confirmer la suppression</h2>
+        <p id="deleteConfirmMessage"></p>
+        <div class="dialog-actions">
+          <button id="deleteConfirmCancel" class="text-button" type="button">Annuler</button>
+          <button id="deleteConfirmSubmit" class="text-button delete-confirm-button" type="button">Supprimer</button>
+        </div>
+      </div>
+    </dialog>
+
     <script src="app.js"></script>
   </body>
 </html>

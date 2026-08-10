@@ -615,6 +615,44 @@ svg {
   stroke-width: 2.35;
 }
 
+.history-controls {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 80;
+  display: inline-flex;
+  gap: 5px;
+  padding: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(29, 29, 29, 0.9);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(14px);
+}
+
+.history-button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--muted-strong);
+}
+
+.history-button:hover:not(:disabled),
+.history-button:focus-visible:not(:disabled) {
+  outline: 0;
+  border-color: var(--border-strong);
+  background: var(--surface-strong);
+  color: var(--text);
+}
+
+.history-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
 .sections {
   display: grid;
   gap: 54px;
@@ -735,6 +773,19 @@ svg {
 .widget-move-controls .small-icon-button:focus-visible {
   border-color: var(--border-strong);
   background: var(--surface-strong);
+}
+
+.small-icon-button[data-action^="delete"] {
+  border-color: rgba(255, 102, 102, 0.6);
+  background: rgba(153, 35, 35, 0.42);
+  color: #ff9999;
+}
+
+.small-icon-button[data-action^="delete"]:hover,
+.small-icon-button[data-action^="delete"]:focus-visible {
+  border-color: #ff7f7f;
+  background: rgba(183, 45, 45, 0.72);
+  color: #fff1f1;
 }
 
 .widget-edit-controls-divider {
@@ -2247,7 +2298,15 @@ svg {
 }
 
 .context-menu-item.is-danger {
-  color: #f0f0f0;
+  border: 1px solid rgba(255, 101, 101, 0.62);
+  background: rgba(151, 34, 34, 0.48);
+  color: #ffadad;
+}
+
+.context-menu-item.is-danger:hover,
+.context-menu-item.is-danger:focus-visible {
+  background: rgba(185, 44, 44, 0.76);
+  color: #fff4f4;
 }
 
 .context-menu-icon {
@@ -2311,6 +2370,62 @@ svg {
 .dialog::backdrop {
   background: rgba(0, 0, 0, 0.74);
   backdrop-filter: blur(10px);
+}
+
+.delete-confirm-dialog {
+  z-index: 110;
+  max-width: min(440px, calc(100vw - 28px));
+}
+
+.delete-confirm-panel {
+  display: grid;
+  gap: 14px;
+  text-align: center;
+}
+
+.delete-confirm-icon {
+  display: grid;
+  place-self: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(255, 107, 107, 0.52);
+  border-radius: 14px;
+  background: rgba(156, 37, 37, 0.38);
+}
+
+.delete-confirm-icon::before {
+  place-self: center;
+  color: #ff9e9e;
+  content: "!";
+  font-size: 23px;
+  font-weight: 800;
+}
+
+.delete-confirm-panel h2,
+.delete-confirm-panel p {
+  margin: 0;
+}
+
+.delete-confirm-panel p {
+  color: var(--muted-strong);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.delete-confirm-panel .dialog-actions {
+  margin-top: 4px;
+}
+
+.delete-confirm-button {
+  border-color: rgba(255, 101, 101, 0.68);
+  background: rgba(166, 37, 37, 0.64);
+  color: #fff0f0;
+}
+
+.delete-confirm-button:hover,
+.delete-confirm-button:focus-visible {
+  border-color: #ff8c8c;
+  background: rgba(202, 48, 48, 0.8);
 }
 
 .dialog-panel {
@@ -2505,6 +2620,11 @@ svg {
 }
 
 @media (max-width: 720px) {
+  .history-controls {
+    right: 12px;
+    bottom: 12px;
+  }
+
   .app-shell {
     --page-gutter: 14px;
     --page-gutter-total: 28px;

@@ -7,6 +7,7 @@ const DRAG_AUTO_SCROLL_MAX_STEP_PX = 26;
 const POMODORO_WORK_SECONDS = 25 * 60;
 const POMODORO_BREAK_SECONDS = 5 * 60;
 const POMODORO_TOTAL_SESSIONS = 8;
+const HISTORY_LIMIT = 10;
 
 const searchEngines = [
   {
@@ -341,6 +342,8 @@ const state = {
   searchMenuWidgetId: null,
   clockTimer: null,
   pomodoroTimer: null,
+  history: { undo: [], redo: [], lastSavedData: null },
+  deleteConfirmationResolver: null,
 };
 
 const ui = {
@@ -360,6 +363,12 @@ const ui = {
   dialogCancel: document.getElementById("dialogCancel"),
   formError: document.getElementById("formError"),
   contextMenuLayer: document.getElementById("contextMenuLayer"),
+  historyControls: document.getElementById("historyControls"),
+  deleteConfirmDialog: document.getElementById("deleteConfirmDialog"),
+  deleteConfirmTitle: document.getElementById("deleteConfirmTitle"),
+  deleteConfirmMessage: document.getElementById("deleteConfirmMessage"),
+  deleteConfirmCancel: document.getElementById("deleteConfirmCancel"),
+  deleteConfirmSubmit: document.getElementById("deleteConfirmSubmit"),
 };
 
 document.addEventListener("DOMContentLoaded", init);
@@ -381,6 +390,8 @@ async function init() {
     );
   }
 
+  state.history.lastSavedData = cloneData(state.data);
+
   syncDashboardNav();
   render();
 }
@@ -392,6 +403,13 @@ function bindEvents() {
   ui.dialogClose.addEventListener("click", closeDialog);
   ui.dialogCancel.addEventListener("click", closeDialog);
   ui.editorDialog.addEventListener("click", handleDialogBackdropClick);
+  ui.deleteConfirmCancel.addEventListener("click", () => closeDeleteConfirmation(false));
+  ui.deleteConfirmSubmit.addEventListener("click", () => closeDeleteConfirmation(true));
+  ui.deleteConfirmDialog.addEventListener("click", handleDeleteConfirmBackdropClick);
+  ui.deleteConfirmDialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeDeleteConfirmation(false);
+  });
 
   document.addEventListener("click", handleDocumentClick);
   document.addEventListener("contextmenu", handleDocumentContextMenu);
@@ -598,6 +616,20 @@ async function handleDashboardNavClick(event) {
 }
 
 function handleGlobalKeydown(event) {
+  if (
+    (event.metaKey || event.ctrlKey) &&
+    event.key.toLowerCase() === "z" &&
+    !event.target.closest("input, textarea, select, [contenteditable='true']")
+  ) {
+    event.preventDefault();
+    if (event.shiftKey) {
+      redo();
+    } else {
+      undo();
+    }
+    return;
+  }
+
   if (event.key === "Escape") {
     closeContextMenu();
     closeSearchMenus();
@@ -730,6 +762,12 @@ async function handleDocumentClick(event) {
       case "delete-widget":
         closeContextMenu();
         await deleteWidget(actionTarget.dataset.widgetId);
+        break;
+      case "undo":
+        await undo();
+        break;
+      case "redo":
+        await redo();
         break;
       case "add-section":
         closeContextMenu();
@@ -1233,6 +1271,7 @@ function render() {
   renderWidgets();
   renderEditModeNotice();
   renderContextMenu();
+  renderHistoryControls();
   updateClockWidgets();
   updatePomodoroWidgets();
   scheduleVisibleUptimeChecks();
@@ -1545,6 +1584,22 @@ function renderTodoWidget(widget) {
     `,
     { cardClass: " todo-widget-card" },
   );
+}
+
+function renderHistoryControls() {
+  if (!ui.historyControls) {
+    return;
+  }
+
+  const [undoButton, redoButton] = ui.historyControls.querySelectorAll("button");
+  if (!(undoButton instanceof HTMLButtonElement) || !(redoButton instanceof HTMLButtonElement)) {
+    return;
+  }
+
+  undoButton.innerHTML = createIcon("arrow-left");
+  redoButton.innerHTML = createIcon("arrow-right");
+  undoButton.disabled = state.history.undo.length === 0;
+  redoButton.disabled = state.history.redo.length === 0;
 }
 
 function renderQuickNoteWidget(widget) {
@@ -2588,7 +2643,7 @@ async function deleteWidget(widgetId) {
     return;
   }
 
-  if (!confirm(`Supprimer "${widget.title}" ?`)) {
+  if (!(await requestDeleteConfirmation(`le widget « ${widget.title} »`))) {
     return;
   }
 
@@ -2606,7 +2661,7 @@ async function deleteDashboard(dashboardId) {
     return;
   }
 
-  if (!confirm(`Supprimer le dashboard "${dashboard.label}" ?`)) {
+  if (!(await requestDeleteConfirmation(`le dashboard « ${dashboard.label} »`))) {
     return;
   }
 
@@ -5098,7 +5153,7 @@ async function deleteSection(sectionId) {
     return;
   }
 
-  if (!confirm(`Supprimer "${section.title}" et ses liens ?`)) {
+  if (!(await requestDeleteConfirmation(`le widget « ${section.title} » et tous ses liens`))) {
     return;
   }
 
@@ -5119,7 +5174,7 @@ async function deleteLink(sectionId, linkId) {
     return;
   }
 
-  if (!confirm(`Supprimer "${link.title}" ?`)) {
+  if (!(await requestDeleteConfirmation(`le lien « ${link.title} »`))) {
     return;
   }
 
@@ -5896,6 +5951,17 @@ async function selectDashboard(
 }
 
 async function persist(message, options = {}) {
+  const previousData = state.history.lastSavedData;
+  if (
+    options.history !== false &&
+    previousData &&
+    JSON.stringify(previousData) !== JSON.stringify(sanitizeData(state.data))
+  ) {
+    state.history.undo.push(cloneData(previousData));
+    state.history.undo = state.history.undo.slice(-HISTORY_LIMIT);
+    state.history.redo = [];
+  }
+
   state.data = sanitizeData(state.data);
   await saveData(state.data);
   render();
@@ -5930,7 +5996,69 @@ async function loadData() {
 }
 
 async function saveData(data) {
-  await storageSet(STORAGE_KEY, sanitizeData(data));
+  const sanitized = sanitizeData(data);
+  await storageSet(STORAGE_KEY, sanitized);
+  state.history.lastSavedData = cloneData(sanitized);
+}
+
+async function undo() {
+  if (!state.history.undo.length) {
+    return;
+  }
+
+  const previousData = state.history.undo.pop();
+  state.history.redo.push(cloneData(state.data));
+  state.data = cloneData(previousData);
+  closeContextMenu();
+  await saveData(state.data);
+  render();
+  showStatus("Modification annulee.");
+}
+
+async function redo() {
+  if (!state.history.redo.length) {
+    return;
+  }
+
+  const nextData = state.history.redo.pop();
+  state.history.undo.push(cloneData(state.data));
+  state.history.undo = state.history.undo.slice(-HISTORY_LIMIT);
+  state.data = cloneData(nextData);
+  closeContextMenu();
+  await saveData(state.data);
+  render();
+  showStatus("Modification retablie.");
+}
+
+function requestDeleteConfirmation(targetLabel) {
+  if (!ui.deleteConfirmDialog) {
+    return Promise.resolve(false);
+  }
+
+  ui.deleteConfirmTitle.textContent = "Confirmer la suppression";
+  ui.deleteConfirmMessage.textContent = `Voulez-vous vraiment supprimer ${targetLabel} ? Cette action pourra être annulée depuis l’historique.`;
+  ui.deleteConfirmDialog.showModal();
+  ui.deleteConfirmCancel.focus();
+
+  return new Promise((resolve) => {
+    state.deleteConfirmationResolver = resolve;
+  });
+}
+
+function closeDeleteConfirmation(confirmed) {
+  if (ui.deleteConfirmDialog?.open) {
+    ui.deleteConfirmDialog.close();
+  }
+
+  const resolver = state.deleteConfirmationResolver;
+  state.deleteConfirmationResolver = null;
+  resolver?.(confirmed);
+}
+
+function handleDeleteConfirmBackdropClick(event) {
+  if (event.target === ui.deleteConfirmDialog) {
+    closeDeleteConfirmation(false);
+  }
 }
 
 function sanitizeData(input) {
@@ -6974,6 +7102,8 @@ function createIcon(name) {
       '<svg viewBox="0 0 24 24" focusable="false"><circle cx="11" cy="11" r="7"></circle><path d="m16.2 16.2 4.3 4.3"></path></svg>',
     "arrow-right":
       '<svg viewBox="0 0 24 24" focusable="false"><path d="M5 12h13"></path><path d="m13 6 6 6-6 6"></path></svg>',
+    "arrow-left":
+      '<svg viewBox="0 0 24 24" focusable="false"><path d="M19 12H6"></path><path d="m11 6-6 6 6 6"></path></svg>',
     "arrow-up":
       '<svg viewBox="0 0 24 24" focusable="false"><path d="M12 19V5"></path><path d="m6 11 6-6 6 6"></path></svg>',
     "arrow-down":

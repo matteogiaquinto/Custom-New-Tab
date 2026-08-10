@@ -42,6 +42,8 @@ It is not intended for Safari, and it is not currently presented as fully suppor
 - editable link lists
 - selectable search engine
 - local persistence through `chrome.storage.local` with `localStorage` fallback
+- undo and redo controls for the 10 most recent dashboard changes
+- confirmation dialogs and clear destructive-action styling for link and widget deletion
 - dark, compact, framework-free UI
 
 Current widget types:
