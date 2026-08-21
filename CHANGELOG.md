@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.2.0] - 2026-08-21
+
+### Added
+
+- Circular keyboard navigation between dashboards with the left and right arrow keys.
+- Direct dashboard access with the `1` through `9` keys.
+- Toggle shortcuts for Edit mode (`D`) and the Add Widget selector (`F`).
+- A searchable command palette (`Ctrl/Cmd + K`) for actions, dashboards, and saved links.
+- A keyboard-shortcuts reference opened with `?`.
+- `Enter` opens the focused link or dashboard for editing while Edit mode is active.
+
+### Changed
+
+- `Esc` now closes open menus and dialogs, cancels a deletion confirmation, and exits Edit mode.
+- Redo is now also available with `Ctrl/Cmd + Y` (in addition to `Ctrl/Cmd + Shift + Z`).
+
 ## [1.1.0] - 2026-08-10
 
 ### Added
