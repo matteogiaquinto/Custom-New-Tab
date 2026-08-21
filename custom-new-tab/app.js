@@ -616,11 +616,15 @@ async function handleDashboardNavClick(event) {
 }
 
 function handleGlobalKeydown(event) {
-  if (
-    (event.metaKey || event.ctrlKey) &&
-    event.key.toLowerCase() === "z" &&
-    !event.target.closest("input, textarea, select, [contenteditable='true']")
-  ) {
+  const isEditableTarget = event.target.closest(
+    "input, textarea, select, [contenteditable='true']",
+  );
+  const isWidgetSelectorOpen =
+    ui.editorDialog.open && state.dialog?.type === "widget-selector";
+  const hasHistoryModifier = event.metaKey || event.ctrlKey;
+  const key = event.key.toLowerCase();
+
+  if (hasHistoryModifier && key === "z" && !isEditableTarget) {
     event.preventDefault();
     if (event.shiftKey) {
       redo();
@@ -630,9 +634,140 @@ function handleGlobalKeydown(event) {
     return;
   }
 
+  if (hasHistoryModifier && key === "y" && !isEditableTarget) {
+    event.preventDefault();
+    redo();
+    return;
+  }
+
   if (event.key === "Escape") {
-    closeContextMenu();
-    closeSearchMenus();
+    let closedSomething = false;
+
+    if (ui.deleteConfirmDialog?.open) {
+      closeDeleteConfirmation(false);
+      closedSomething = true;
+    }
+    if (ui.editorDialog.open) {
+      closeDialog();
+      closedSomething = true;
+    }
+    if (state.searchMenuWidgetId) {
+      closeSearchMenus();
+      closedSomething = true;
+    }
+    if (ui.contextMenuLayer.innerHTML) {
+      closeContextMenu();
+      closedSomething = true;
+    }
+    if (state.editMode) {
+      toggleEditMode();
+      closedSomething = true;
+    }
+
+    if (closedSomething) {
+      event.preventDefault();
+    }
+    return;
+  }
+
+  if (
+    hasHistoryModifier &&
+    key === "k" &&
+    !ui.editorDialog.open &&
+    !ui.deleteConfirmDialog?.open
+  ) {
+    event.preventDefault();
+    openCommandPalette();
+    return;
+  }
+
+  if (
+    state.dialog?.type === "command-palette" &&
+    event.target.matches("[data-command-palette-input]")
+  ) {
+    const firstResult = ui.dialogFields.querySelector(
+      ".command-palette-item",
+    );
+    if (event.key === "Enter" && firstResult) {
+      event.preventDefault();
+      firstResult.click();
+      return;
+    }
+    if (event.key === "ArrowDown" && firstResult) {
+      event.preventDefault();
+      firstResult.focus();
+      return;
+    }
+  }
+
+  // Keep typing and open dialogs free from global shortcuts.
+  if (
+    isEditableTarget ||
+    (ui.editorDialog.open && !isWidgetSelectorOpen) ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.altKey
+  ) {
+    return;
+  }
+
+  if (event.key === "?" || (event.shiftKey && event.key === "/")) {
+    event.preventDefault();
+    openKeyboardShortcutsDialog();
+    return;
+  }
+
+  if (event.key === "Enter" && state.editMode) {
+    const linkCard = event.target.closest(".link-card");
+    if (linkCard) {
+      event.preventDefault();
+      openLinkDialog(
+        getLink(linkCard.dataset.sectionId, linkCard.dataset.linkId),
+        linkCard.dataset.sectionId,
+      );
+      return;
+    }
+
+    const dashboardTab = event.target.closest(".dashboard-tab");
+    if (dashboardTab) {
+      event.preventDefault();
+      openDashboardDialog(
+        getMutableDashboards().find(
+          (dashboard) => dashboard.id === dashboardTab.dataset.dashboardId,
+        ) || null,
+      );
+      return;
+    }
+  }
+
+  if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+    event.preventDefault();
+    selectAdjacentDashboard(event.key === "ArrowRight" ? 1 : -1);
+    return;
+  }
+
+  if (/^[1-9]$/.test(event.key)) {
+    const dashboard = getDashboardViews()[Number(event.key) - 1];
+    if (dashboard) {
+      event.preventDefault();
+      selectDashboardFromKeyboard(dashboard.id);
+    }
+    return;
+  }
+
+  if (key === "d") {
+    event.preventDefault();
+    toggleEditMode();
+    return;
+  }
+
+  if (key === "f") {
+    event.preventDefault();
+    if (isWidgetSelectorOpen) {
+      closeDialog();
+    } else {
+      openWidgetSelectorDialog();
+    }
     return;
   }
 
@@ -741,6 +876,9 @@ async function handleDocumentClick(event) {
         break;
       case "add-widget":
         openWidgetSelectorDialog();
+        break;
+      case "command-palette-select":
+        await runCommandPaletteItem(actionTarget);
         break;
       case "create-widget":
         await createWidgetFromType(actionTarget.dataset.widgetType);
@@ -1049,7 +1187,169 @@ function handleDocumentSubmit(event) {
   }
 }
 
+async function selectAdjacentDashboard(direction) {
+  const dashboards = getDashboardViews();
+  if (dashboards.length < 2) {
+    return;
+  }
+
+  const selectedIndex = dashboards.findIndex(
+    (dashboard) => dashboard.id === state.data.selectedDashboard,
+  );
+  const currentIndex = selectedIndex === -1 ? 0 : selectedIndex;
+  const nextIndex =
+    (currentIndex + direction + dashboards.length) % dashboards.length;
+
+  await selectDashboardFromKeyboard(dashboards[nextIndex].id);
+}
+
+async function selectDashboardFromKeyboard(dashboardId) {
+  await selectDashboard(dashboardId, {
+    save: true,
+    scrollTop: true,
+    scrollBehavior: "smooth",
+  });
+}
+
+function openKeyboardShortcutsDialog() {
+  closeContextMenu();
+  closeSearchMenus();
+  state.dialog = { type: "keyboard-shortcuts" };
+  ui.dialogTitle.textContent = "Raccourcis clavier";
+  ui.dialogSubmit.style.display = "none";
+  ui.dialogCancel.textContent = "Fermer";
+  ui.dialogFields.innerHTML = `
+    <div class="keyboard-shortcuts" aria-label="Liste des raccourcis">
+      <div><span class="keyboard-shortcuts-keys"><kbd>←</kbd><kbd>→</kbd></span><span>Changer de dashboard</span></div>
+      <div><span class="keyboard-shortcuts-keys"><kbd>1</kbd></span><span>Accéder aux neuf premiers dashboards</span></div>
+      <div><span class="keyboard-shortcuts-keys"><kbd>D</kbd></span><span>Activer ou quitter le mode Édition</span></div>
+      <div><span class="keyboard-shortcuts-keys"><kbd>F</kbd></span><span>Ouvrir ou fermer l’ajout de widget</span></div>
+      <div><span class="keyboard-shortcuts-keys"><kbd>Ctrl</kbd><kbd>K</kbd></span><span>Rechercher une commande, un dashboard ou un lien</span></div>
+      <div><span class="keyboard-shortcuts-keys"><kbd>Ctrl</kbd><kbd>Z</kbd></span><span>Annuler</span></div>
+      <div><span class="keyboard-shortcuts-keys"><kbd>Ctrl</kbd><kbd>Y</kbd></span><span>Rétablir</span></div>
+      <div><span class="keyboard-shortcuts-keys"><kbd>Esc</kbd></span><span>Fermer les éléments ouverts et quitter l’édition</span></div>
+      <div><span class="keyboard-shortcuts-keys"><kbd>?</kbd></span><span>Afficher cette aide</span></div>
+    </div>
+  `;
+  openDialog();
+  ui.dialogClose.focus();
+}
+
+function openCommandPalette() {
+  closeContextMenu();
+  closeSearchMenus();
+  state.dialog = { type: "command-palette" };
+  ui.dialogTitle.textContent = "Commandes rapides";
+  ui.dialogSubmit.style.display = "none";
+  ui.dialogCancel.textContent = "Fermer";
+  ui.dialogFields.innerHTML = `
+    <label class="command-palette-search" for="commandPaletteInput">
+      <span>Rechercher</span>
+      <input id="commandPaletteInput" type="search" autocomplete="off" placeholder="Commande, dashboard ou lien…" data-command-palette-input />
+    </label>
+    <div class="command-palette-results" data-command-palette-results></div>
+  `;
+  renderCommandPaletteResults();
+  openDialog({ focusSelector: "[data-command-palette-input]" });
+}
+
+function getCommandPaletteItems() {
+  const actions = [
+    {
+      type: "action",
+      id: "toggle-edit",
+      label: state.editMode ? "Quitter le mode Édition" : "Activer le mode Édition",
+      detail: "Commande · D",
+    },
+    { type: "action", id: "add-widget", label: "Ajouter un widget", detail: "Commande · F" },
+    { type: "action", id: "shortcuts", label: "Afficher les raccourcis clavier", detail: "Commande · ?" },
+  ];
+  const dashboards = getDashboardViews().map((dashboard) => ({
+    type: "dashboard",
+    id: dashboard.id,
+    label: dashboard.label,
+    detail: "Dashboard",
+  }));
+  const links = state.data.sections.flatMap((section) =>
+    section.links.map((link) => ({
+      type: "link",
+      id: link.id,
+      sectionId: section.id,
+      label: link.title,
+      detail: `Lien · ${section.title}`,
+    })),
+  );
+
+  return [...actions, ...dashboards, ...links];
+}
+
+function renderCommandPaletteResults(query = "") {
+  const results = ui.dialogFields.querySelector("[data-command-palette-results]");
+  if (!results) {
+    return;
+  }
+
+  const normalizedQuery = normalizeText(query).toLocaleLowerCase();
+  const matches = getCommandPaletteItems()
+    .filter((item) =>
+      `${item.label} ${item.detail}`.toLocaleLowerCase().includes(normalizedQuery),
+    )
+    .slice(0, 12);
+
+  results.innerHTML = matches.length
+    ? matches
+        .map(
+          (item) => `
+            <button
+              class="command-palette-item"
+              type="button"
+              data-action="command-palette-select"
+              data-command-type="${item.type}"
+              data-command-id="${escapeHtml(item.id)}"
+              ${item.sectionId ? `data-section-id="${escapeHtml(item.sectionId)}"` : ""}
+            >
+              <strong>${escapeHtml(item.label)}</strong>
+              <span>${escapeHtml(item.detail)}</span>
+            </button>
+          `,
+        )
+        .join("")
+    : `<p class="command-palette-empty">Aucun résultat.</p>`;
+}
+
+async function runCommandPaletteItem(target) {
+  const { commandType, commandId, sectionId } = target.dataset;
+  closeDialog();
+
+  if (commandType === "dashboard") {
+    await selectDashboardFromKeyboard(commandId);
+    return;
+  }
+
+  if (commandType === "link") {
+    const link = getLink(sectionId, commandId);
+    if (link) {
+      window.location.assign(link.url);
+    }
+    return;
+  }
+
+  if (commandId === "toggle-edit") {
+    toggleEditMode();
+  } else if (commandId === "add-widget") {
+    openWidgetSelectorDialog();
+  } else if (commandId === "shortcuts") {
+    openKeyboardShortcutsDialog();
+  }
+}
+
 async function handleDocumentInput(event) {
+  const commandPaletteInput = event.target.closest("[data-command-palette-input]");
+  if (commandPaletteInput) {
+    renderCommandPaletteResults(commandPaletteInput.value);
+    return;
+  }
+
   const input = event.target.closest("[data-widget-input]");
   if (!input) {
     return;
